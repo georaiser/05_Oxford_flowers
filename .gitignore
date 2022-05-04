@@ -1,0 +1,7 @@
+models/*
+flowers/*
+flower_data/*
+*.bak*
+.ipynb_checkpoints/*
+PyTorch_Feature_Extraction.ipynb
+*.pt
