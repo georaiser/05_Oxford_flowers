@@ -9,29 +9,33 @@ Created on Tue May  3 18:56:49 2022
 import time
 import numpy as np
 import torch
+from tqdm import tqdm
 
 class RunModel:
-    def __init__(self, model, train_loader, valid_loader, criterion, optimizer, scheduler, n_epochs=3):
+    def __init__(self, model, train_loader, valid_loader, criterion, optimizer, scheduler, n_epochs):
         super(RunModel, self).__init__()
         
-
-        train_on_gpu = torch.cuda.is_available()
-        if not train_on_gpu:
-            print('CUDA is not available.  Training on CPU ...')
-        else:
-            print('CUDA is available!  Training on GPU ...')
-    
+        self.model=model
+        self.train_loader = train_loader
+        self.valid_loader = valid_loader
+        self.criterion = criterion
+        self.optimizer = optimizer
+        self.scheduler = scheduler
+        self.n_epochs = n_epochs        
+        
+    def run(self):
         since = time.time()
+        train_on_gpu = torch.cuda.is_available()
+    
         valid_loss_min = np.Inf # track change in validation loss
         # Early stopping
-        last_loss = 100
-        patience = 2
+        patience = 5
         triggertimes = 0
-        # Accuracy
-        eval_losses=[]
-        eval_accu=[]
+
+        losses = {'train':[], 'val':[]}
+        accuracies = {'train':[], 'val':[]}
     
-        for epoch in range(1, n_epochs+1):
+        for epoch in range(1, self.n_epochs+1):
     
             # keep track of training and validation loss
             train_loss = 0.0
@@ -42,77 +46,96 @@ class RunModel:
             ###################
             # train the model #
             ###################
-            model.train()
-            for data, target in train_loader:
-                # move tensors to GPU if CUDA is available
-                if train_on_gpu:
-                    data, target = data.cuda(), target.cuda()
-                # clear the gradients of all optimized variables
-                optimizer.zero_grad()
-                # forward pass: compute predicted outputs by passing inputs to the model
-                output = model(data)
-                # calculate the batch loss
-                loss = criterion(output, target)
-                # backward pass: compute gradient of the loss with respect to model parameters
-                loss.backward()
-                # perform a single optimization step (parameter update)
-                optimizer.step()
-                # update training loss
-                train_loss += loss.item()*data.size(0)
-    
+            self.model.train()
+            
+            with tqdm(self.train_loader, unit="batch") as tepoch:
+                for data, target in tepoch:
+                    tepoch.set_description(f"Epoch {epoch}")            
+
+                    # move tensors to GPU if CUDA is available
+                    if train_on_gpu:
+                        data, target = data.cuda(), target.cuda()
+                    # clear the gradients of all optimized variables
+                    self.optimizer.zero_grad()
+                    # forward pass: compute predicted outputs by passing inputs to the model
+                    output = self.model(data)
+                    # calculate the batch loss
+                    loss = self.criterion(output, target)
+                    # backward pass: compute gradient of the loss with respect to model parameters
+                    loss.backward()
+                    # perform a single optimization step (parameter update)
+                    self.optimizer.step()
+                    # update training loss
+                    train_loss += loss.item()*data.size(0)
+                    
+                    _, predicted = output.max(1)
+                    total += target.size(0)
+                    correct += predicted.eq(target).sum().item()
+                    
+                    accuracy=100.*correct/total
+                    tepoch.set_postfix(loss=train_loss/len(self.train_loader.sampler), accuracy=accuracy)
+                    time.sleep(0.1)
+                 
+                # Metrics
+                # calculate average losses
+                train_loss = train_loss/len(self.train_loader.sampler)
+                accuracy=100.*correct/total
+                accuracies['train'].append(accuracy)
+                losses['train'].append(train_loss)
+
             ######################    
             # validate the model #
             ######################
-            model.eval()
-            for data, target in valid_loader:
+            self.model.eval()
+            for data, target in self.valid_loader:
                 # move tensors to GPU if CUDA is available
                 if train_on_gpu:
                     data, target = data.cuda(), target.cuda()
                 # forward pass: compute predicted outputs by passing inputs to the model
-                output = model(data)
+                output = self.model(data)
                 # calculate the batch loss
-                loss = criterion(output, target)
+                loss = self.criterion(output, target)
                 # update average validation loss 
                 valid_loss += loss.item()*data.size(0)
                 # scheduler 
-                scheduler.step()
+                self.scheduler.step()
     
                 _, predicted = output.max(1)
                 total += target.size(0)
                 correct += predicted.eq(target).sum().item()
-    
+                
+
+            # Metrics    
             # calculate average losses
-            train_loss = train_loss/len(train_loader.sampler)
-            valid_loss = valid_loss/len(valid_loader.sampler)
-    
-            accu=100.*correct/total
-    
-            eval_accu.append(accu)
-            eval_losses.append(train_loss)
-            print('Train Loss: %.3f | Accuracy: %.3f'%(train_loss,accu))
-    
-            # print training/validation statistics 
-            print('Epoch: {} \tTraining Loss: {:.6f} \tValidation Loss: {:.6f}'.format(
-                epoch, train_loss, valid_loss))
+            valid_loss = valid_loss/len(self.valid_loader.sampler)  
+            accuracy=100.*correct/total
+            accuracies['val'].append(accuracy)
+            losses['val'].append(valid_loss)
+            
+            print('Epoch: %.0f | Train Loss: %.3f | Accuracy: %.3f'%(epoch, train_loss, accuracy))
+            print('Epoch: %.0f | Valid Loss: %.3f | Accuracy: %.3f'%(epoch, valid_loss, accuracy))
+
     
             # save model if validation loss has decreased
             if valid_loss <= valid_loss_min:
-                print('Validation loss decreased ({:.6f} --> {:.6f}).  Saving model ...'.format(
-                valid_loss_min,
-                valid_loss))
-                torch.save(model.state_dict(), str(model).split('(')[0]+'.pt')
+                print('Validation loss decreased ({:.6f} --> {:.6f}).  Saving model ...'.format(valid_loss_min, valid_loss))
+                torch.save(self.model.state_dict(), str(self.model).split('(')[0]+'.pt')
                 valid_loss_min = valid_loss
     
             # Early stopping
             if valid_loss > valid_loss_min:
                 triggertimes += 1
-                print('Trigger Times:', triggertimes)
+                #print('Trigger Times:', triggertimes)
     
                 if triggertimes >= patience:
-                    print('Early stopping!\nStart to test process.')
+                    print('Early stopping!')
     
             else:
-                print('trigger times: 0')
+                #print('trigger times: 0')
                 triggertimes = 0
+        
+        
     
         print('time_elapsed: ', time.time() - since)
+        
+        return accuracies, losses
