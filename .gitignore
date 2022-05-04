@@ -5,3 +5,4 @@ flower_data/*
 .ipynb_checkpoints/*
 PyTorch_Feature_Extraction.ipynb
 *.pt
+utis/__pycache__/*
