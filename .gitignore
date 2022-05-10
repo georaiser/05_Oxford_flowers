@@ -1,8 +1,5 @@
-models/*
-flowers/*
+Models/*
 flower_data/*
 *.bak*
 .ipynb_checkpoints/*
-PyTorch_Feature_Extraction.ipynb
-*.pt
-utis/__pycache__/*
+Utils/__pycache__/*
