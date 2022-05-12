@@ -80,21 +80,23 @@ class RunModel():
             sum_correct = 0 
             sum_examples = 0            
             loop = tqdm(self.valid_loader, leave = False)
-            for inputs, targets in loop:
-                # to device
-                inputs, targets = inputs.to(device), targets.to(device)
-                # forward + backward + optimize
-                outputs = self.model(inputs)
-                loss = self.criterion(outputs, targets) 
-                # partial statistics - predictions
-                valid_loss += loss.data.item() * inputs.size(0)                            
-                correct = torch.eq(torch.max(F.softmax(outputs, dim=1), dim=1)[1], targets).view(-1)
-                sum_correct += torch.sum(correct).item()
-                sum_examples += correct.shape[0]  
-                # loop tqdm
-                loop.set_description("Epoch [{}/{}]".format(epoch+1,self.n_epochs))
-                loop.set_postfix(val_loss=loss.data.item() * inputs.size(0), val_accuracy=sum_correct / sum_examples, Lr=self.optimizer.param_groups[0]['lr'])
             
+            with torch.no_grad():      
+                for inputs, targets in loop:
+                    # to device
+                    inputs, targets = inputs.to(device), targets.to(device)
+                    # forward + backward + optimize
+                    outputs = self.model(inputs)
+                    loss = self.criterion(outputs, targets) 
+                    # partial statistics - predictions
+                    valid_loss += loss.data.item() * inputs.size(0)                            
+                    correct = torch.eq(torch.max(F.softmax(outputs, dim=1), dim=1)[1], targets).view(-1)
+                    sum_correct += torch.sum(correct).item()
+                    sum_examples += correct.shape[0]  
+                    # loop tqdm
+                    loop.set_description("Epoch [{}/{}]".format(epoch+1,self.n_epochs))
+                    loop.set_postfix(val_loss=loss.data.item() * inputs.size(0), val_accuracy=sum_correct / sum_examples, Lr=self.optimizer.param_groups[0]['lr'])
+                
             # total statistics 
             valid_loss = valid_loss/len(self.valid_loader.dataset)
             valid_accuracy = sum_correct / sum_examples
