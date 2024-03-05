@@ -3,3 +3,4 @@ dataset
 dataset_subset
 old
 .ipynb_checkpoints
+scripts/__pycache__
