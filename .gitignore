@@ -1,5 +1,5 @@
-Models/*
-flower_data/*
-*.bak*
-.ipynb_checkpoints/*
-Utils/__pycache__/*
+models
+dataset
+dataset_subset
+old
+.ipynb_checkpoints
